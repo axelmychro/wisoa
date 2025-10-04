@@ -1,67 +1,45 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const {
-  Client,
-  Collection,
-  Events,
-  GatewayIntentBits,
-  MessageFlags,
-} = require("discord.js");
-const { token, errMsg } = require("./config.json");
+const { Client, Collection, GatewayIntentBits } = require("discord.js");
+const { token } = require("./config.json");
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-client.cmds = new Collection();
-const foldersPath = path.join(__dirname, "cmds");
-const cmdFolders = fs.readdirSync(foldersPath);
+client.commands = new Collection();
+const foldersPath = path.join(__dirname, "commands");
+const commandFolders = fs.readdirSync(foldersPath);
 
-for (const folder of cmdFolders) {
-  const cmdsPath = path.join(foldersPath, folder);
-  const cmdFiles = fs
-    .readdirSync(cmdsPath)
+for (const folder of commandFolders) {
+  const commandsPath = path.join(foldersPath, folder);
+  const commandFiles = fs
+    .readdirSync(commandsPath)
     .filter((file) => file.endsWith(".js"));
-  for (const file of cmdFiles) {
-    const filePath = path.join(cmdsPath, file);
-    const cmd = require(filePath);
-    if ("data" in cmd && "execute" in cmd) {
-      client.cmds.set(cmd.data.name, cmd);
+  for (const file of commandFiles) {
+    const filePath = path.join(commandsPath, file);
+    const command = require(filePath);
+    if ("data" in command && "execute" in command) {
+      client.commands.set(command.data.name, command);
     } else {
       console.log(
-        `[WARNING] The cmd at ${filePath} is missing a required "data" or "execute" property.`
+        `[W] the command at ${filePath} is missing a required "data" or "execute" property`
       );
     }
   }
 }
 
-client.once(Events.ClientReady, (readyClient) => {
-  console.log(`${readyClient.user.tag} online,`);
-});
+const eventsPath = path.join(__dirname, "events");
+const eventFiles = fs
+  .readdirSync(eventsPath)
+  .filter((file) => file.endsWith(".js"));
 
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  const cmd = interaction.client.cmds.get(interaction.cmdName);
-
-  if (!cmd) {
-    console.error(`cmd:${interaction.cmdName} is not real,`);
-    return;
+for (const file of eventFiles) {
+  const filePath = path.join(eventsPath, file);
+  const event = require(filePath);
+  if (event.once) {
+    client.once(event.name, (...args) => event.execute(...args));
+  } else {
+    client.on(event.name, (...args) => event.execute(...args));
   }
-
-  try {
-    await cmd.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({
-        content: errMsg,
-        flags: MessageFlags.Ephemeral,
-      });
-    } else {
-      await interaction.reply({
-        content: errMsg,
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-  }
-});
+}
 
 client.login(token);
